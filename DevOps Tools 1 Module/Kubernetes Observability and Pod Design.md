@@ -1,0 +1,249 @@
+# Kubernetes Observability and Pod Design
+
+
+
+## Pods
+### Pod Structure and Usage
+- **Definition:** Pods are the smallest deployable units in Kubernetes. They represent a single instance of a running process in a cluster.
+- **Components of a Pod:**
+  - **Containers:** Typically one container per pod, but can include multiple containers for closely related processes. Containers within a pod share the same:
+    - **Network Namespace:** Containers can communicate using `localhost`.
+    - **Storage:** Shared volumes that persist data.
+  - **Init Containers:** Special containers that run before the main application container starts. Useful for initialization tasks.
+
+- **Networking:**
+  - Each pod gets its own IP address, enabling communication between containers inside and outside the pod.
+
+- **Usage:**
+  - Ideal for running closely coupled processes.
+  - Commonly used for applications like microservices, batch jobs, and single-instance databases.
+
+### Significance of Label Selectors and Annotations in Pods
+#### Labels
+- **Definition:** Key-value pairs assigned to Kubernetes objects.
+- **Purpose:** Used to categorize and organize resources efficiently.
+- **Examples:**
+  ```yaml
+  labels:
+    app: frontend
+    env: prod
+  ```
+- **Benefits:**
+  - Simplifies grouping of objects for queries and operations.
+  - Enables targeted updates and deployments.
+
+#### Selectors
+- **Definition:** Filters that group objects based on their labels.
+- **Types:**
+  - **Equality-Based Selectors:** Match objects with specific key-value pairs.
+  - **Set-Based Selectors:** Match objects based on a set of criteria.
+
+- **Examples:**
+  ```yaml
+  matchLabels:
+    app: frontend
+    env: prod
+  ```
+
+#### Annotations
+- **Definition:** Non-identifying metadata for Kubernetes objects.
+- **Purpose:** Provides additional information, often used by external tools and systems.
+- **Examples:**
+  ```yaml
+  annotations:
+    prometheus.io/scrape: "true"
+    description: "This pod runs the frontend service."
+  ```
+- **Common Use Cases:**
+  - Monitoring (e.g., Prometheus scraping configurations).
+  - Documentation.
+
+---
+
+## Probes
+### Introduction
+Probes are used to determine the health and operational status of containers. Kubernetes uses probes to decide whether a container is ready to accept traffic or needs to be restarted.
+
+### Types of Probes
+#### 1. Startup Probe
+- **Purpose:** Ensures containers with long initialization times are not prematurely marked as failed.
+- **When to Use:** Applications that perform significant setup tasks before becoming operational.
+- **Behavior:** Delays the execution of readiness and liveness probes.
+- **Example:**
+  ```yaml
+  startupProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    failureThreshold: 30
+    periodSeconds: 10
+  ```
+
+#### 2. Readiness Probe
+- **Purpose:** Determines if a container is ready to accept traffic.
+- **Behavior:** Traffic is routed only to pods that pass the readiness probe.
+- **Use Cases:**
+  - Applications that load configuration files or establish database connections before serving traffic.
+- **Example:**
+  ```yaml
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  ```
+
+#### 3. Liveness Probe
+- **Purpose:** Ensures a container is functioning as expected. If a container fails this probe, it is restarted.
+- **Behavior:** Used to recover from application crashes or deadlocks.
+- **Example:**
+  ```yaml
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8080
+    initialDelaySeconds: 3
+    periodSeconds: 5
+  ```
+
+![image](https://hackmd.io/_uploads/S1cjyZvSkl.png)
+
+---
+
+## Label Selectors and Annotations
+### Labels
+- **Primary Use:** Categorization and identification of objects.
+- **Advanced Example:**
+  ```yaml
+  metadata:
+    labels:
+      app: ecommerce
+      tier: backend
+      release: stable
+  ```
+
+### Selectors
+- **Advanced Usage:**
+  ```yaml
+  matchExpressions:
+    - key: tier
+      operator: In
+      values:
+      - frontend
+      - backend
+  ```
+- **Purpose:** Enables complex filtering logic for grouping resources.
+
+### Annotations
+- **Use in Observability:** Helps integrate tools like Prometheus or Grafana.
+- **Example with Multiple Annotations:**
+  ```yaml
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    team: "devops"
+  ```
+
+---
+
+## Deployment Strategies
+### Update Strategies
+- **Maximum Unavailable:**
+  - Limits the number of unavailable pods during updates.
+  - Ensures a minimum number of pods remain operational.
+- **Maximum Surge:**
+  - Defines how many additional pods can be temporarily created during updates.
+  - Allows updates without reducing available capacity.
+
+### Deployment Types
+#### Blue-Green Deployment
+- **Workflow:**
+  1. Deploy Blue (current version).
+  2. Deploy Green (new version) alongside Blue.
+  3. Switch traffic to Green after successful testing.
+- **Benefits:**
+  - Zero downtime.
+  - Immediate rollback capability.
+- **Challenges:**
+  - Requires additional resources for parallel deployments.
+
+#### Canary Deployment
+- **Workflow:**
+  1. Incrementally roll out changes to a small subset of users.
+  2. Monitor the impact and error rate.
+  3. Gradually scale Canary or revert to Base if needed.
+- **Benefits:**
+  - Fine-grained control over deployment.
+  - Early detection of issues.
+
+---
+
+## Practical Demonstrations of Deployment Strategies
+### Key Steps for Deployment
+1. **Create Base Deployment:** Defines the stable version of the application.
+2. **Create Canary Deployment:** Defines the new version of the application with reduced initial traffic.
+3. **Configure Services:** Use labels and selectors to route traffic appropriately.
+4. **Monitor Performance:**
+   - Check logs for errors.
+   - Validate system performance.
+5. **Handle Failures:** Scale back Canary to zero if errors occur.
+6. **Finalize Rollout:** Scale Canary incrementally and balance traffic distribution.
+
+### Example Configuration
+#### Base Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: base-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+      version: base
+  template:
+    metadata:
+      labels:
+        app: web
+        version: base
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14
+```
+
+#### Canary Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canary-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+      version: canary
+  template:
+    metadata:
+      labels:
+        app: web
+        version: canary
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.19
+```
+
+---
+
+## Tools and Example Configurations
+- **Nginx Example:**
+  - Base Deployment: Version 1.14.
+  - Canary Deployment: Version 1.19.
+- **Command-Line Tools:** kubectl, Helm.
+- **Monitoring Tools:** Prometheus, Grafana.
+
+---
