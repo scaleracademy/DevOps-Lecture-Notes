@@ -1,249 +1,138 @@
 # Kubernetes Observability and Pod Design
 
-
-
-## Pods
-### Pod Structure and Usage
-- **Definition:** Pods are the smallest deployable units in Kubernetes. They represent a single instance of a running process in a cluster.
-- **Components of a Pod:**
-  - **Containers:** Typically one container per pod, but can include multiple containers for closely related processes. Containers within a pod share the same:
-    - **Network Namespace:** Containers can communicate using `localhost`.
-    - **Storage:** Shared volumes that persist data.
-  - **Init Containers:** Special containers that run before the main application container starts. Useful for initialization tasks.
-
-- **Networking:**
-  - Each pod gets its own IP address, enabling communication between containers inside and outside the pod.
-
-- **Usage:**
-  - Ideal for running closely coupled processes.
-  - Commonly used for applications like microservices, batch jobs, and single-instance databases.
-
-### Significance of Label Selectors and Annotations in Pods
-#### Labels
-- **Definition:** Key-value pairs assigned to Kubernetes objects.
-- **Purpose:** Used to categorize and organize resources efficiently.
-- **Examples:**
-  ```yaml
-  labels:
-    app: frontend
-    env: prod
-  ```
-- **Benefits:**
-  - Simplifies grouping of objects for queries and operations.
-  - Enables targeted updates and deployments.
-
-#### Selectors
-- **Definition:** Filters that group objects based on their labels.
-- **Types:**
-  - **Equality-Based Selectors:** Match objects with specific key-value pairs.
-  - **Set-Based Selectors:** Match objects based on a set of criteria.
-
-- **Examples:**
-  ```yaml
-  matchLabels:
-    app: frontend
-    env: prod
-  ```
-
-#### Annotations
-- **Definition:** Non-identifying metadata for Kubernetes objects.
-- **Purpose:** Provides additional information, often used by external tools and systems.
-- **Examples:**
-  ```yaml
-  annotations:
-    prometheus.io/scrape: "true"
-    description: "This pod runs the frontend service."
-  ```
-- **Common Use Cases:**
-  - Monitoring (e.g., Prometheus scraping configurations).
-  - Documentation.
+This document provides comprehensive lecture notes covering key concepts such as service accounts, pod scheduling, init containers, and effective pod design. It incorporates examples, use cases, and detailed explanations for instructors to teach effectively.
 
 ---
 
-## Probes
-### Introduction
-Probes are used to determine the health and operational status of containers. Kubernetes uses probes to decide whether a container is ready to accept traffic or needs to be restarted.
+## Service Accounts
 
-### Types of Probes
-#### 1. Startup Probe
-- **Purpose:** Ensures containers with long initialization times are not prematurely marked as failed.
-- **When to Use:** Applications that perform significant setup tasks before becoming operational.
-- **Behavior:** Delays the execution of readiness and liveness probes.
-- **Example:**
-  ```yaml
-  startupProbe:
-    httpGet:
-      path: /healthz
-      port: 8080
-    failureThreshold: 30
-    periodSeconds: 10
-  ```
+### Introduction to Service Accounts
+- **Purpose**: Service accounts provide an identity to processes running within a pod, granting them specific permissions to interact with Kubernetes resources.
+- **Example**: A pod running a web application that needs to read data from a ConfigMap would require a service account with the appropriate read permissions.
 
-#### 2. Readiness Probe
-- **Purpose:** Determines if a container is ready to accept traffic.
-- **Behavior:** Traffic is routed only to pods that pass the readiness probe.
-- **Use Cases:**
-  - Applications that load configuration files or establish database connections before serving traffic.
-- **Example:**
-  ```yaml
-  readinessProbe:
-    httpGet:
-      path: /ready
-      port: 8080
-    initialDelaySeconds: 5
-    periodSeconds: 10
-  ```
+### Key Concepts
+1. **Permissions and Namespace**:
+   - Service accounts are tied to a specific namespace.
+   - Resources like secrets and ConfigMaps are also namespace-scoped. If no namespace is specified, they are assigned to the `default` namespace.
+   - Service accounts must be explicitly assigned to the same namespace as the resources they interact with.
 
-#### 3. Liveness Probe
-- **Purpose:** Ensures a container is functioning as expected. If a container fails this probe, it is restarted.
-- **Behavior:** Used to recover from application crashes or deadlocks.
-- **Example:**
-  ```yaml
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: 8080
-    initialDelaySeconds: 3
-    periodSeconds: 5
-  ```
+2. **Creating a Service Account**:
+   - Via CLI:  
+     ```
+     kubectl create serviceaccount <name_of_sa>
+     ```
+   - Via YAML:  
+     ```yaml
+     apiVersion: v1
+     kind: ServiceAccount
+     metadata:
+       name: <name_of_sa>
+       namespace: <namespace_name>
+     ```
 
-![image](https://hackmd.io/_uploads/S1cjyZvSkl.png)
+3. **Use Case**:
+   - Assign permissions for pods to perform specific actions:
+     - Pod A can read resources.
+     - Pod B can read, write, and delete resources.
 
 ---
 
-## Label Selectors and Annotations
-### Labels
-- **Primary Use:** Categorization and identification of objects.
-- **Advanced Example:**
-  ```yaml
-  metadata:
-    labels:
-      app: ecommerce
-      tier: backend
-      release: stable
-  ```
+## Pod Scheduling to Nodes
 
-### Selectors
-- **Advanced Usage:**
-  ```yaml
-  matchExpressions:
-    - key: tier
-      operator: In
-      values:
-      - frontend
-      - backend
-  ```
-- **Purpose:** Enables complex filtering logic for grouping resources.
+### Introduction to Pod Scheduling
+- Pod scheduling involves determining which node will host a pod. This ensures optimal resource usage and prevents conflicts or failures.
+- **Example Scenario**:
+  - Node1 has 20GB of memory.
+  - Node2 has 100GB of memory.
+  - A pod requiring 40GB of memory would fail to schedule on Node1 but succeed on Node2.
 
-### Annotations
-- **Use in Observability:** Helps integrate tools like Prometheus or Grafana.
-- **Example with Multiple Annotations:**
-  ```yaml
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/path: "/metrics"
-    team: "devops"
-  ```
+### Factors Influencing Pod Scheduling
+1. **Resource Requests and Limits**:
+   - Define how much CPU and memory a pod requests and caps its usage.
 
----
+2. **Taints and Tolerations**:
+   - **Taints**: Applied to nodes to restrict pods from scheduling unless they tolerate the taint.
+   - **Tolerations**: Applied to pods to enable them to schedule on tainted nodes.
+   - Effects of taints:
+     - `NoSchedule`: Pods without toleration are not scheduled.
+     - `PreferNoSchedule`: Avoid scheduling but not strictly enforced.
+     - `NoExecute`: Evicts existing pods if they don’t tolerate the taint.
+   - **Command Example**:
+     ```
+     kubectl taint nodes <node_name> <key>=<value>:NoSchedule
+     ```
+   - **Use Cases**:
+     - Dedicated workloads.
+     - Node maintenance.
 
-## Deployment Strategies
-### Update Strategies
-- **Maximum Unavailable:**
-  - Limits the number of unavailable pods during updates.
-  - Ensures a minimum number of pods remain operational.
-- **Maximum Surge:**
-  - Defines how many additional pods can be temporarily created during updates.
-  - Allows updates without reducing available capacity.
+3. **Node Selectors and Labels**:
+   - Nodes and pods can be labeled with key-value pairs to match workloads to nodes.
+   - **Commands**:
+     - Labeling a node:  
+       ```
+       kubectl label nodes <node_name> instanceType=spot
+       ```
+     - Assigning a pod to a labeled node:  
+       ```yaml
+       nodeSelector:
+         instanceType: spot
+       ```
 
-### Deployment Types
-#### Blue-Green Deployment
-- **Workflow:**
-  1. Deploy Blue (current version).
-  2. Deploy Green (new version) alongside Blue.
-  3. Switch traffic to Green after successful testing.
-- **Benefits:**
-  - Zero downtime.
-  - Immediate rollback capability.
-- **Challenges:**
-  - Requires additional resources for parallel deployments.
+4. **Node Affinity**:
+   - A flexible approach to scheduling pods on specific nodes based on rules.
+   - **Key Differences**:
+     - **Taints and Tolerations**: Block or isolate workloads.
+     - **Node Selectors**: Require exact label matches.
+     - **Node Affinity**: Supports both mandatory (`requiredDuringSchedulingIgnoredDuringExecution`) and preferred scheduling rules (`preferredDuringSchedulingIgnoredDuringExecution`).
 
-#### Canary Deployment
-- **Workflow:**
-  1. Incrementally roll out changes to a small subset of users.
-  2. Monitor the impact and error rate.
-  3. Gradually scale Canary or revert to Base if needed.
-- **Benefits:**
-  - Fine-grained control over deployment.
-  - Early detection of issues.
+| **Aspect**               | **Taints & Tolerations**               | **Node Selectors**                     | **Node Affinity**                      |
+|--------------------------|----------------------------------------|----------------------------------------|----------------------------------------|
+| **Purpose**              | Block pods unless tolerated            | Match labels strictly                  | Control placement with flexible rules  |
+| **Flexibility**          | Strict                                 | Strict                                 | Flexible                               |
+| **Configuration**        | `tolerations` in pod spec              | `nodeSelector` in pod spec             | `affinity` in pod spec                 |
+| **Effect when unmatched**| Won't schedule                         | Won't schedule                         | May block or prefer scheduling         |
+
 
 ---
 
-## Practical Demonstrations of Deployment Strategies
-### Key Steps for Deployment
-1. **Create Base Deployment:** Defines the stable version of the application.
-2. **Create Canary Deployment:** Defines the new version of the application with reduced initial traffic.
-3. **Configure Services:** Use labels and selectors to route traffic appropriately.
-4. **Monitor Performance:**
-   - Check logs for errors.
-   - Validate system performance.
-5. **Handle Failures:** Scale back Canary to zero if errors occur.
-6. **Finalize Rollout:** Scale Canary incrementally and balance traffic distribution.
+## Init Containers
 
-### Example Configuration
-#### Base Deployment
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: base-deployment
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web
-      version: base
-  template:
-    metadata:
-      labels:
-        app: web
-        version: base
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:1.14
-```
+### Overview of Init Containers
+- **Definition**: Init containers run before the main application containers and are designed to complete specific initialization tasks.
+- **Characteristics**:
+  - They run sequentially and must complete successfully before the main container starts.
+  - Multiple init containers run one after the other.
 
-#### Canary Deployment
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: canary-deployment
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: web
-      version: canary
-  template:
-    metadata:
-      labels:
-        app: web
-        version: canary
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:1.19
-```
+### Use Cases
+1. Setting up configurations or preparing environment variables.
+2. Verifying dependencies or required services.
+3. Performing security checks or downloading initialization data.
+
 
 ---
 
-## Tools and Example Configurations
-- **Nginx Example:**
-  - Base Deployment: Version 1.14.
-  - Canary Deployment: Version 1.19.
-- **Command-Line Tools:** kubectl, Helm.
-- **Monitoring Tools:** Prometheus, Grafana.
+## Pod Design and Observability
 
+### Designing Pods with Dependencies
+- Applications with dependencies must be designed such that:
+  - Application1 only starts after Application2 completes.
+  - Kubernetes ensures proper sequencing through tools like init containers and probes.
+
+### Key Elements of Pod Design
+1. **Probes**:
+   - Liveness Probe: Ensures the container is running as expected.
+   - Readiness Probe: Verifies the application is ready to serve requests.
+   - Startup Probe: Confirms the application has started successfully.
+
+2. **Labels, Selectors, and Annotations**:
+   - Labels help organize and select specific pods or nodes.
+   - Annotations provide metadata that doesn’t affect scheduling.
+
+3. **Deployments and Services**:
+   - Use Deployments to manage replicas and updates.
+   - Services expose pods for network communication within or outside the cluster.
+
+4. **Deployment Strategies**:
+   - Rolling Updates: Incrementally update pods without downtime.
+   - Blue-Green Deployments: Use separate environments for new and old versions.
 ---
