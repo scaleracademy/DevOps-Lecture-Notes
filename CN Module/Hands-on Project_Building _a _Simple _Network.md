@@ -1,4 +1,4 @@
-## Hands-on Project: Building a Simple Network
+## Hands-on Project Building a Simple Network
 
 
 ### Agenda of the Lecture
