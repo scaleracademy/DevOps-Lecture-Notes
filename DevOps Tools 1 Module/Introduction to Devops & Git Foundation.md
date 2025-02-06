@@ -1,4 +1,4 @@
-# **Introduction to DevOps & Git Foundation**
+# **01 Introduction to DevOps & Git Foundation**
 
 This document outlines the core concepts discussed in the lecture on **DevOps** and **Git**. It covers cultural aspects of DevOps, the twelve-factor application methodology for scalable systems, and foundational Git commands and workflows.
 
