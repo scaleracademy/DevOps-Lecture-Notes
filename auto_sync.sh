@@ -49,13 +49,6 @@ echo "$(date) - Pushing merged changes to main" >> git_sync.log
 git push origin main
 check_error "Git push main"
 
-# Delete the temporary branch
-echo "$(date) - Deleting temporary branch $BRANCH_NAME" >> git_sync.log
-git checkout main
-git branch -d $BRANCH_NAME
-check_error "Git branch delete"
-git push origin --delete $BRANCH_NAME
-check_error "Git remote branch delete"
 
 
 echo "$(date) - Git sync completed successfully!" >> git_sync.log
