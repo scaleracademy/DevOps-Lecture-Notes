@@ -55,8 +55,6 @@ check_error "Git branch delete"
 git push origin --delete $BRANCH_NAME
 check_error "Git remote branch delete"
 
-# Schedule log deletion after 2 days
-find git_sync.log -type f -mtime +2 -exec rm -f {} \;
 
 echo "$(date) - Git sync completed successfully!" >> git_sync.log
 echo "Git sync completed successfully!"
