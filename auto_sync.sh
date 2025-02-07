@@ -8,6 +8,10 @@ check_error() {
         return 1  # Instead of exiting, return an error code
     fi
 }
+# Pull latest changes from the main branch
+echo "$(date) - Pulling latest changes" >> git_sync.log
+git pull origin main
+check_error "Git pull"
 
 # Create a new branch for the changes
 BRANCH_NAME="auto-sync-$(date +%Y%m%d%H%M%S)"
@@ -15,10 +19,7 @@ echo "$(date) - Creating branch $BRANCH_NAME" >> git_sync.log
 git checkout -b $BRANCH_NAME
 check_error "Git branch creation"
 
-# Pull latest changes from the main branch
-echo "$(date) - Pulling latest changes" >> git_sync.log
-git pull origin main
-check_error "Git pull"
+
 
 # Add changes to Git
 echo "$(date) - Adding changes" >> git_sync.log
@@ -50,6 +51,7 @@ check_error "Git push main"
 
 # Delete the temporary branch
 echo "$(date) - Deleting temporary branch $BRANCH_NAME" >> git_sync.log
+git checkout main
 git branch -d $BRANCH_NAME
 check_error "Git branch delete"
 git push origin --delete $BRANCH_NAME
