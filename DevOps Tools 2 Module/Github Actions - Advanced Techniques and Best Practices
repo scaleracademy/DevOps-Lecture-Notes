@@ -1,0 +1,218 @@
+# GitHub Workflows, Branching Strategies & Expression Examples
+
+
+# 1. Manual Workflows
+
+## Concept
+GitHub Actions allow the execution of workflows in multiple ways, including automatic and manual triggers. The `workflow_dispatch` event is specifically used for manually triggering workflows. This is useful in cases where automated triggers are not ideal, such as running deployments on demand or executing administrative tasks that require user input.
+
+## Key Features
+- **Workflow Dispatch:** Allows users to initiate workflows manually from the GitHub UI.
+- **Custom Inputs:** Users can specify parameters (such as region, image, environment, etc.) when triggering the workflow manually.
+
+### Example YAML Configuration:
+
+```yaml
+name: Manual Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Target region for deployment'
+        required: true
+        default: 'us-east-1'
+      image:
+        description: 'Docker image to deploy'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Deploy Application
+        run: |
+          echo "Deploying image ${{ github.event.inputs.image }} to region ${{ github.event.inputs.region }}"
+```
+
+### Breakdown
+- The `workflow_dispatch` keyword defines a manual trigger.
+- `inputs` define parameters that users must provide when triggering the workflow.
+- The `deploy` job runs on `ubuntu-latest` and executes steps such as checking out the repository and deploying an application.
+- `github.event.inputs` is used to reference user-provided values in the workflow.
+
+# 2. Pipeline Setup
+
+## Concept
+A **pipeline** is a structured sequence of automated processes that handle software integration, testing, and deployment. Pipelines ensure a streamlined development cycle by automating tasks such as code validation, compilation, testing, and deployment.
+
+### Pipeline Keywords
+- **CI (Continuous Integration):** Ensures that code changes are automatically built and tested.
+- **CD (Continuous Deployment/Delivery):** Automates the deployment of software to production environments.
+- **Pipeline Triggers:** Pipelines can be triggered by events such as code pushes, pull requests, schedule-based executions, or manual interventions.
+
+## Workflow Types
+- **Automated Triggers:** Initiate workflows based on push events, pull requests, or scheduled intervals.
+- **Manual Initiation:** Allows users to trigger workflows on demand.
+
+### Example YAML Snippet for a CI Pipeline
+
+```yaml
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      - name: Run Tests
+        run: npm test
+      - name: Build Application
+        run: npm run build
+```
+
+### Breakdown
+- **Triggers:** The workflow runs on `push` and `pull_request` events for `main` and `develop` branches.
+- **Steps:** The pipeline follows a sequence:
+  - Checking out the repository.
+  - Running tests (`npm test`).
+  - Building the application (`npm run build`).
+
+# 3. Workflow Triggers and Filters
+
+## Concept
+GitHub Actions allow workflows to be triggered based on specific events and provide filters to control when these workflows execute.
+
+## Triggers
+- **Push Events:** Triggered when new commits are pushed to the repository.
+- **Pull Request Events:** Triggered when pull requests are opened, updated, or merged.
+- **Scheduled Triggers:** Run workflows at predefined intervals using cron syntax.
+- **Manual Triggers (`workflow_dispatch`)**: Allow users to execute workflows on demand.
+
+## Filters
+- **Branch Filters:** Restrict workflows to execute only for specific branches.
+- **Path Filters:** Allow workflows to run only if changes occur in specified directories or files.
+
+### Example: Branch and Path Filters
+
+```yaml
+name: Filtered Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'src/**'
+      - 'config/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: npm run test
+```
+
+### Breakdown
+- The workflow runs only when changes occur in `src/` or `config/` directories.
+- It applies to `push` and `pull_request` events for specific branches.
+
+# 4. Expressions and Context Objects
+
+## Concept
+Expressions in GitHub Actions enable dynamic control over workflows by evaluating conditions, manipulating strings, and applying logic within YAML files.
+
+### Features
+- **Conditionals:** Run steps based on certain conditions (`if` statements).
+- **String Operations:** Validate string content with functions like `contains`, `startsWith`, and `endsWith`.
+- **Logical & Mathematical Operations:** Combine multiple conditions or perform arithmetic operations.
+- **Ternary Operator:** Shortens conditional assignments.
+
+### Example: Using Conditional Expressions
+
+```yaml
+jobs:
+  conditional-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Branch and Run Command
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "Running on main branch"
+          else
+            echo "Not on main branch"
+          fi
+      - name: Using Ternary Operator
+        run: |
+          echo "The value is ${{ github.event_name == 'push' && 'Push Event' || 'Other Event' }}"
+```
+
+### Breakdown
+- The job evaluates whether the workflow is running on the `main` branch.
+- A ternary operator is used to print different messages based on the event type.
+
+# 5. Branching Strategies in Git
+
+## Concept
+Effective branch management is critical for streamlined development and release processes.
+
+### Common Branching Strategies
+- **Main Branch:** Contains stable, production-ready code.
+- **Develop Branch:** A working branch where features are integrated before merging into `main`.
+- **Feature Branches:** Used for developing new features.
+- **Release Branches:** Prepare features for production releases.
+- **Hotfix Branches:** Address urgent issues in production.
+
+### Example: Branch-Based CI/CD Workflow
+
+```yaml
+name: Branch Strategy Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/*'
+      - 'release/*'
+      - 'hotfix/*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Build
+        run: echo "Building branch ${{ github.ref }}"
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Production
+        run: echo "Deploying main branch to production..."
+```
+
+### Breakdown
+- Workflows are triggered based on branch naming conventions.
+- A conditional `deploy` job ensures deployments occur only on `main`.
+
+
